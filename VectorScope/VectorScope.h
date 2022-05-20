@@ -5,16 +5,24 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
+#include <opencv2/core/cuda.hpp>
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/cudaarithm.hpp>
 
 #define _USE_MATH_DEFINES
+#define ALPHA 1.1
+#define BIAS 10
+
 #include <cmath>
 #include <iostream>
+#include <time.h>
 
 
 using namespace cv;
 using namespace std;
 
 const double PI = 3.14159265358979;
+
 
 
 class Vectorscope {
@@ -55,6 +63,21 @@ public:
 	void Draw();
 
 };
+
+
+class ApplyLUT {
+
+	Mat lut;
+
+
+public:
+
+	void CreateLookup();
+	void TestLUTinRGB();
+	void TestLUT();
+	void TestLUTinGpu();
+};
+
 
 
 Mat src;

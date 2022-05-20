@@ -1,18 +1,30 @@
 #include "VectorScope.h"
 
 
-string filename = "D:/color/test/volly.png";
+string filename = "D:/color/test/003020_2";
 
 
 
 int main(int ac, char** av) {
 
-	src = imread(filename);
+	src = imread(filename+".png");
+	if(src.cols==3840)
+		resize(src, src, Size(1920, 1080));
+	ApplyLUT lutTest;
+
+	//for (int i = 0; i < 50; i++) {
+
+	//	//lutTest.TestLUTinGpu();
+	//	//lutTest.TestLUT();
+	//}
+
+		lutTest.TestLUTinRGB();
 
 
-	Vectorscope vecScope;
 
-	vecScope.Draw();
+
+	//Vectorscope vecScope;
+	//vecScope.Draw();
 
 
 	return 0;
@@ -20,11 +32,7 @@ int main(int ac, char** av) {
 
 
 
-void DrawVectorscope() {
 
-
-
-}
 
 void ShowImg(Mat img) {
 
@@ -191,4 +199,150 @@ void Vectorscope::Draw()
 
 
 	ShowImg(src);
+}
+
+void ApplyLUT::CreateLookup()
+{
+	//lut = Mat(1, 256, CV_8UC3);
+
+	//for (int iter = 0; iter < 256; ++iter) {
+	//	auto& pixelValue = lut.at<Vec3b>(0, iter);
+
+	//	pixelValue[0] = saturate_cast<uchar>;
+	//	calcHist()
+	//}
+
+}
+
+void ApplyLUT::TestLUTinRGB()
+{
+	int histSize = 256;
+	Mat lut(1, histSize, CV_8UC3);
+	Mat result;
+
+	//for (int i = 0; i < 256; ++i) {
+	//	auto& pixelValue = lut.at<Vec3b>(0, i);
+
+	//	pixelValue[0] = saturate_cast<uchar>(ALPHA * i + BIAS-5);
+	//	pixelValue[1] = saturate_cast<uchar>(ALPHA * i + BIAS);
+	//	pixelValue[2] = saturate_cast<uchar>(ALPHA * i + BIAS);
+	//}
+
+	for (int i = 0; i < 256; ++i) {
+		auto& pixelValue = lut.at<Vec3b>(0, i);
+
+		pixelValue[0] = saturate_cast<uchar>(pow(i,0.97));
+		pixelValue[1] = saturate_cast<uchar>( i -10);
+		pixelValue[2] = saturate_cast<uchar>(0.9*i);
+	}
+
+
+	auto t0 = std::chrono::system_clock::now();
+	LUT(src, lut, result);
+
+	std::chrono::milliseconds delta = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - t0);
+	cout << "calc time : " << delta.count() << endl;
+
+
+	imshow("lut test", result);
+	imwrite(filename + "_lut.png", result);
+	imshow("raw", src*1.1);
+	waitKey(0);
+
+}
+
+void ApplyLUT::TestLUT()
+{
+	
+
+	int histSize = 256;
+	Mat lut(1, histSize, CV_8UC1);
+	Mat result;
+	
+	Mat hist;
+	Mat gray;
+	cvtColor(src, gray, COLOR_BGR2GRAY);
+	double minval; double maxval;
+	Point minloc; Point maxloc;
+	calcHist(&gray, 1, 0, Mat(), hist, 1, &histSize, 0);
+
+	minMaxLoc(hist, &minval, &maxval, &minloc, &maxloc, Mat());
+	double cut_th;
+	//cut_th = maxloc.y * 0.83;
+	//cut_th = maxval * 0.9;
+	cut_th = 140;
+	for (int i = 0; i < histSize; i++) {
+		if (i <= cut_th)
+			lut.at<uchar>(i) = i;
+		else
+			lut.at<uchar>(i) = 255;
+	}
+
+	auto t0 = std::chrono::system_clock::now();
+	LUT(src, lut, result);
+
+	std::chrono::milliseconds delta = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - t0);
+	cout << "calc time : " << delta.count() << endl;
+
+	imshow("lut test", result);
+	waitKey(1);
+}
+
+void ApplyLUT::TestLUTinGpu()
+{
+	int histSize =256;
+
+	cuda::GpuMat srcGpu, grayGpu;
+	Mat gray;
+	cvtColor(src, gray, COLOR_BGR2GRAY);
+	grayGpu.upload(gray);
+	srcGpu.upload(src);
+
+	cuda::GpuMat hist;
+	
+
+	double minval; double maxval;
+	Point minloc; Point maxloc;
+	//calcHist(&gray, 1, 0, Mat(), hist, 1, &histSize, 0);
+
+	//calcHist(&src, 3, 0,Mat(), hist, 1, &histSize, 0);
+	cuda::calcHist(grayGpu, hist, cuda::Stream::Null());
+
+
+	cuda::minMaxLoc(hist, &minval, &maxval, &minloc, &maxloc, cuda::GpuMat());
+	double cut_th;
+	//cut_th = maxloc.y * 0.83;
+	//cut_th = maxval * 0.9;
+	cut_th = 140;
+	lut = Mat::zeros(1, histSize, CV_8UC1);
+	for (int i = 0; i < histSize; i++) {
+		if (i <= cut_th)
+			lut.at<uchar>(i) = i;
+		else
+			lut.at<uchar>(i) = 255;
+	}
+
+
+
+	cuda::GpuMat gt;
+	gt.upload(lut);
+	cuda::GpuMat result;
+	auto t0 = std::chrono::system_clock::now();
+	Ptr<cuda::LookUpTable> lutGpu = cuda::createLookUpTable(gt);
+	lutGpu->transform(srcGpu, result);
+
+
+
+	std::chrono::milliseconds delta = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - t0);
+	cout << "calc time : " << delta.count() << endl;
+
+
+
+	Mat output;
+	result.download(output);
+	imshow("lut test in gpu ", output);
+	waitKey(1);
+
+	gt.release();
+	result.release();
 }
